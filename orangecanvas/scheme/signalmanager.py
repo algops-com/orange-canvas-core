@@ -989,6 +989,30 @@ class SignalManager(QObject):
         ))
         return ready
 
+    def exit_if_batch_mode(self):
+        if (
+                getattr(self.__workflow.parent(), 'batch_mode', False) and
+                len(self.pending_nodes()) == 0 and
+                len(self.blocking_nodes()) == 0 and
+                len(self.invalidated_nodes()) == 0
+        ):
+            errored = False
+            for node in self.__nodes():
+                for _, message in node._SchemeNode__state_messages.items():
+                    if message.contents:
+                        if message.severity >= 3:
+                            errored = True
+                        severity_str = {
+                            2: 'warning',
+                            3: 'error',
+                            1: 'information',
+                        }[message.severity]
+                        print(
+                            f"'{node.title}' widget {severity_str}:"
+                            f"\t{message.contents}"
+                        )
+            quit(1 if errored else 0)
+
     @Slot()
     def __process_next(self):
         if not self.__state == SignalManager.Running:
@@ -1005,7 +1029,9 @@ class SignalManager(QObject):
             return
 
         if not self.__input_queue:
+            self.exit_if_batch_mode()
             return
+
 
         if self.__process_next_helper(use_max_active=True):
             # Schedule another update (will be a noop if nothing to do).
